@@ -74,6 +74,15 @@ workbuddy-fusion 是一个自托管的 **OpenAI 兼容网关**，把 `CodeBuddy`
 - 共享同一账号池，由账号 `realm` 或请求模型名前缀（`cn:` / `global:`）决定路由；`global.enabled` 可一键锁死纯 CN 部署
 - 国际版支持注册激活、地区完善、一次性 trial 加油包领取（`./trial.sh`）
 
+### 可视化看板
+
+- **单页自带，零外部依赖** — `internal/server/dashboard/index.html` 以 `go:embed` 打进二进制，网关本体直接托管页面与数据接口，不需要 nginx 或额外静态目录；页面随二进制走，不会出现"页面比后端旧"的错配。图表为手写 SVG，不引 CDN 或前端框架，内网 / 离线环境照常渲染
+- **看板凭据与 API 密钥分离** — 页面与 `/api/*` 走 HTTP Basic Auth（`dashboard.user` / `dashboard.pass`），与网关 `api_key` 是两套凭据：把看板交给运维同事看，不必连带交出 API 密钥；页面里也不下发 `api_key`。未配置凭据时看板路由完全不注册，行为与"没有看板"的版本一致
+- **四块视图** — ①账号池：状态 / 域 / 余额 / 冷却剩余 / 在途 / 成功错误计数；②积分趋势：5 分钟采样折线 + 逐号实时余额表；③Token 用量：小时柱状 + 按模型 / 按域 / 按账号明细；④调用流水：时间 / 域 / 模型 / 模式 / 状态码 / 账号。页面 30 秒自动刷新，也可手动立即刷新
+- **本地落盘，随目录备份** — `stats.json`（用量累计，小时桶保留 14 天）、`call_log.json`（调用流水，保留最近 5000 条）、`credits_snapshots.json`（积分快照，5 分钟一点、保留 2016 点）；三者与 `state.json` 同目录，整目录备份即可
+
+访问方式：浏览器打开 `http://<host>:7863/`，用 `dashboard.user` / `dashboard.pass` 登录。
+
 ### 辅助工具
 
 - 积分日报：`./credit.sh`（美化 / `-json`，realm 感知双域）
@@ -229,6 +238,8 @@ curl -s http://localhost:7863/v1/chat/completions \
 | `pool.idle_weight_per_hour` / `pool.idle_weight_max` | float，`0.5` / `5.0` | 闲置补偿权重与封顶 |
 | `pool.expiring_soon` | duration，`168h` | 快过期积分窗口，`0` = 禁用分桶 |
 | `session_sticky.enabled` / `ttl` / `gc_interval` | bool / duration，`true` / `30m` / `5m` | 会话粘性开关、绑定 TTL、GC 周期 |
+| `dashboard.user` / `dashboard.pass` | string，空 | 看板 Basic Auth 凭据；**两者都非空才启用看板**，任一为空则根路径与 `/api/*` 都不注册 |
+| `dashboard.data_dir` | string，空 | 看板数据目录，空 = 取 `state_file` 所在目录（默认 `./data`） |
 
 ## API 端点清单
 
@@ -238,8 +249,14 @@ curl -s http://localhost:7863/v1/chat/completions \
 | GET | `/v1/models` | 是 | 动态模型清单（缓存 1h）；CN 模型 ID 带 `cn:` 前缀，国际版带 `global:` 前缀，供路由选择 |
 | GET | `/status` | 是 | 账号池状态：汇总 + 每账号详情（积分 / 冷却 / 熔断 / 计数 / `disabled_reason` / `rate_limited_models`） |
 | GET | `/healthz` | 否 | 健康检查，形如 `{"healthy":2,"total":3,"service":"workbuddy-fusion"}`；无健康账号返回 503 |
+| GET | `/stats` | 是 | Token 用量累计：总量 + 按模型 / 按域 / 按账号维度 + 小时桶（保留 14 天） |
+| GET | `/calls?limit=N` | 是 | 调用流水（时间 / 域 / 模型 / 模式 / 状态码 / 账号），默认 200 条、保留最近 5000 条 |
+| GET | `/credits` | 是 | 逐号实时积分余额（读上游）+ 汇总 |
+| GET | `/credits/history` | 是 | 积分快照历史（5 分钟一点，保留 2016 点），看板折线数据源 |
 
 鉴权方式：`Authorization: Bearer <api_key>`。`api_key` 留空时网关不校验（仅建议在完全隔离的私有环境使用）。
+
+看板路径不走 `api_key`：`GET /` 与 `GET /api/*` 用 `dashboard.user` / `dashboard.pass` 做 HTTP Basic Auth（`/api/<endpoint>` 即上表中对应端点的看板入口，前缀剥离后内部复用同一处理器）。看板凭据未配置时上述两条路径均不注册，返回 404。
 
 ## 目录结构
 
@@ -251,7 +268,7 @@ internal/
   pool/         # 账号池：四因子选号、租约、冷却、熔断、限额台账
   session/      # 会话粘性路由与 ID 派生
   scheduler/    # 定时任务编排
-  server/       # HTTP 路由、鉴权、提示词改写、SSE 重建
+  server/       # HTTP 路由、鉴权、提示词改写、SSE 重建、看板与用量 / 流水 / 积分快照
   upstream/     # CodeBuddy 接口客户端（对话 / 计费 / 成长）
   prompt/       # 系统提示词体系
   redisstore/   # 可选 Redis 状态镜像

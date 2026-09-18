@@ -50,6 +50,19 @@ type Config struct {
 	// false（显式逃生门）时即便 auth realm=global 也不提供 global: 模型名
 	// （modelList 不列 global 名单）。
 	GlobalEnabled bool
+
+	// ---- 看板（可选，零回归）----
+	//
+	// DashboardUser / DashboardPass 是看板的登录凭据，与 APIKey 分离：
+	// 把看板账号给运维同事，不必交出网关 api_key。两者任一为空 = 不启用看板，
+	// 此时根路径行为与启用前完全一致（无 /api/ 入口、无 /stats 等看板数据接口）。
+	DashboardUser string
+	DashboardPass string
+	// Stats / CallTrack / CreditTrack 看板数据源，可为 nil（未启用看板时）：
+	// 各记录点均做 nil 判定，缺省不记录、零开销。
+	Stats       *Stats
+	CallTrack   *CallTrack
+	CreditTrack *CreditTrack
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -92,6 +105,15 @@ func NewHandler(cfg Config) *Handler {
 	h.mux.HandleFunc("GET /v1/models", h.withAuth(h.models))
 	h.mux.HandleFunc("GET /status", h.withAuth(h.status))
 	h.mux.HandleFunc("GET /healthz", h.healthz)
+	// 看板数据接口（与 /status 同走 withAuth；看板页面经 /api/* 访问时由
+	// dashAuthed 标记放行，见 withAuth）。
+	h.mux.HandleFunc("GET /stats", h.withAuth(h.stats))
+	h.mux.HandleFunc("GET /credits", h.withAuth(h.credits))
+	h.mux.HandleFunc("GET /credits/history", h.withAuth(h.creditsHistory))
+	h.mux.HandleFunc("GET /calls", h.withAuth(h.calls))
+	// 看板页面与 /api/* 入口：仅在配置了看板凭据时注册（缺省零回归）。
+	h.registerRoot()
+	h.registerDashboard()
 	return h
 }
 
@@ -101,6 +123,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 已经过看板 Basic Auth 的请求直接放行：浏览器手里的凭据是看板账号密码，
+		// 不是网关 api_key。放行标记由 dashboardAPI 在剥离 /api 前缀后写入请求
+		// 上下文（dashAuthed），因此只有"走过看板鉴权"的内部转发才享受豁免——
+		// 直接打 /status 的外部请求仍须 api_key。api_key 不下发到页面。
+		if dashAuthed(r) {
+			next(w, r)
+			return
+		}
 		if h.cfg.APIKey != "" {
 			authz := r.Header.Get("Authorization")
 			// 常量时间比较（发现 7）：!= 短路时序随前缀长度变化，公网暴露下
@@ -176,6 +206,201 @@ func countsMapFrom(total, healthy, cooling, disabled, inFlightFull int) map[stri
 		"cooling":        cooling,
 		"disabled":       disabled,
 		"in_flight_full": inFlightFull,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 看板数据接口（/stats、/credits、/credits/history、/calls）与 chat 出口记录。
+//
+// 统一约定：
+//   - 未启用看板时 cfg.Stats / cfg.CallTrack / cfg.CreditTrack 为 nil，各 handler
+//     返回空结构（HTTP 200 + 空数组），不报错——前端据此静默降级。
+//   - 账号清单一律来自 pool.List()（脱敏 Status），凭 UID 取 *auth.Auth 后直连
+//     上游 billing 口径；不读本地缓存，看到的即真实可花费余额。
+//   - 双 realm 并存时全部输出带 realm 维度（分域汇总 + 分域快照）。
+// ---------------------------------------------------------------------------
+
+// credits 查询所有账号的实时积分余额。
+//
+// 数据口径与 cmd/credit 一致：走 upstream.ResourceSummary（余额 / 已用 / 总量 /
+// 套餐数），global 账号自动路由到 workbuddy.ai 的 billing 接口（由 upstream 内部
+// 按 realm 决定 base），handler 不重复判断域。
+func (h *Handler) credits(w http.ResponseWriter, r *http.Request) {
+	sts := h.cfg.Pool.List()
+	type acctView struct {
+		UID       string `json:"uid"`
+		Realm     string `json:"realm,omitempty"`
+		Nickname  string `json:"nickname,omitempty"`
+		Remain    *int64 `json:"remain"`
+		Used      *int64 `json:"used"`
+		Size      *int64 `json:"size"`
+		Packages  int    `json:"packages,omitempty"`
+		ExpiresAt int64  `json:"expires_at,omitempty"`     // accessToken 到期（Unix 秒）
+		ExpiresIn int64  `json:"expires_in_sec,omitempty"` // 距到期剩余秒数，<0 表示已过期
+		OK        bool   `json:"ok"`
+		Error     string `json:"error,omitempty"`
+	}
+	out := make([]acctView, len(sts))
+	var wg sync.WaitGroup
+	for i, st := range sts {
+		wg.Add(1)
+		// 每账号一个 goroutine：上游 billing 是网络往返，串行查几十个号会让页面明显卡顿。
+		go func(i int, uid, nick, realm string) {
+			defer wg.Done()
+			res := acctView{UID: uid, Nickname: nick, Realm: realm}
+			a := h.cfg.Pool.AuthByUID(uid)
+			if a == nil {
+				res.Error = "auth not found"
+				out[i] = res
+				return
+			}
+			if a.ExpiresAt > 0 {
+				res.ExpiresAt = a.ExpiresAt
+				res.ExpiresIn = a.ExpiresAt - time.Now().Unix()
+			}
+			remain, used, size, packs, err := h.cfg.Upstream.ResourceSummary(a)
+			if err != nil {
+				res.Error = err.Error()
+			} else {
+				res.Remain, res.Used, res.Size = &remain, &used, &size
+				res.Packages = packs
+				res.OK = true
+			}
+			out[i] = res
+		}(i, st.UID, st.Nickname, st.Realm)
+	}
+	wg.Wait()
+	var total, okCount int64
+	byRealm := map[string]int64{}
+	for _, a := range out {
+		if !a.OK {
+			continue
+		}
+		okCount++
+		if a.Remain != nil {
+			total += *a.Remain
+			byRealm[dimOr(a.Realm, statsEmptyDim)] += *a.Remain
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service": ServiceName,
+		"ts":      time.Now().Unix(),
+		"total": map[string]any{
+			"remain":   total,
+			"accounts": len(sts),
+			"ok":       okCount,
+		},
+		"by_realm": byRealm,
+		"accounts": out,
+	})
+}
+
+// SampleCredits 采集所有账号当前剩余积分明细，供 CreditTrack 周期采样。
+//
+// 与 /credits 同口径（UserResource，即"可花费余额"），但只保留采样所需的最小字段；
+// 返回空切片表示本次无有效采样——调用方据此跳过写入，不用空数据改写趋势曲线。
+func (h *Handler) SampleCredits() []CreditAccountSnapshot {
+	sts := h.cfg.Pool.List()
+	out := make([]CreditAccountSnapshot, len(sts))
+	ok := make([]bool, len(sts))
+	var wg sync.WaitGroup
+	for i, st := range sts {
+		wg.Add(1)
+		go func(i int, uid, nick, realm string) {
+			defer wg.Done()
+			a := h.cfg.Pool.AuthByUID(uid)
+			if a == nil {
+				return
+			}
+			remain, err := h.cfg.Upstream.UserResource(a)
+			if err != nil {
+				return
+			}
+			out[i] = CreditAccountSnapshot{UID: uid, Name: nick, Realm: realm, Remain: remain}
+			ok[i] = true
+		}(i, st.UID, st.Nickname, st.Realm)
+	}
+	wg.Wait()
+	detail := make([]CreditAccountSnapshot, 0, len(sts))
+	for i := range out {
+		if ok[i] {
+			detail = append(detail, out[i])
+		}
+	}
+	return detail
+}
+
+// stats 返回 token 用量统计（累计 + 分模型 + 分账号 + 分域 + 按小时趋势）。
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.Stats == nil {
+		writeJSON(w, http.StatusOK, StatsSnapshot{})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.cfg.Stats.Snapshot())
+}
+
+// calls 返回最近的调用流水（账号 + 模型 + 域 + 时间 + 状态），供 /calls 查询。
+// limit 取 ?limit=，缺省 200，上限为流水保留条数。
+func (h *Handler) calls(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.CallTrack == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"calls": []CallRecord{}})
+		return
+	}
+	limit := parseCallLimit(r.URL.Query().Get("limit"), 200)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"calls":        h.cfg.CallTrack.Recent(limit),
+		"total":        h.cfg.CallTrack.Count(),
+		"limit":        limit,
+		"generated_at": time.Now().Unix(),
+	})
+}
+
+// creditsHistory 返回积分总量快照序列（供趋势图与消耗速率观察）。
+func (h *Handler) creditsHistory(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.CreditTrack == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"snapshots": []CreditSnapshot{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snapshots":    h.cfg.CreditTrack.History(),
+		"interval_sec": int(creditSnapInterval.Seconds()),
+		"generated_at": time.Now().Unix(),
+	})
+}
+
+// recordUsage 在 chat 请求出口记录一次看板数据：调用流水 + token 用量。
+//
+// 与表格日志同一出口、含全部失败路径（此时 uid 为空）：流水照记，因为"这次请求
+// 没号可用"本身就是要看的运维信号；用量不记（没有 usage 语义）。
+// 两个数据源均为 nil（未启用看板）时零开销返回。
+func (h *Handler) recordUsage(st *chatStat, model string) {
+	if st == nil {
+		return
+	}
+	if model == "" {
+		model = statsEmptyDim
+	}
+	uid, nickname := st.uid, st.nickname
+	if uid != "" && nickname == "" {
+		// handler 未显式设置昵称时回查账号池（只读，不额外发网络请求）。
+		if a := h.cfg.Pool.AuthByUID(uid); a != nil {
+			nickname = a.Nickname
+		}
+	}
+	if h.cfg.CallTrack != nil {
+		h.cfg.CallTrack.Record(uid, nickname, st.realm, model, st.mode, st.status)
+	}
+	if h.cfg.Stats != nil {
+		// usage 缺失以负数表达（与日志口径一致），此处归零后再累加：
+		// 缺失≠0，但也不能冲减累计总量。
+		prompt, completion := st.ptoks, st.toks
+		if prompt < 0 {
+			prompt = 0
+		}
+		if completion < 0 {
+			completion = 0
+		}
+		h.cfg.Stats.Record(model, uid, st.realm, prompt, completion, prompt+completion, st.status)
 	}
 }
 
@@ -466,6 +691,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	st := newChatStat(time.Now(), body, peek.Stream)
 	defer st.done()
 
+	// 看板记录（可选）：注册在 st.done() 之后 → 先于表格日志执行，读到的是最终
+	// status 与 token 数。realm 用上方解析结果（裸名请求恒 "cn"，零回归），
+	// 模型名用请求原名（含可能的 realm 前缀），看板据此区分"同一模型走了哪个域"。
+	// 未启用看板（cfg.Stats / cfg.CallTrack 为 nil）时 recordUsage 直接返回。
+	st.realm = realm
+	defer func() { h.recordUsage(st, st.model) }()
+
 	tried := map[string]bool{}
 	var lastErr error
 
@@ -694,6 +926,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			_ = upstream.Stream(w, stats)
 			st.ttfb = stats.TTFB()
 			st.toks, _ = stats.Tokens()
+			st.ptoks, _ = stats.PromptTokens()
 			// 成本账本：末帧 usage 带 credit 与 token 总数时记录实测单价，
 			// 供下次选号把免费/便宜的号排在前面。
 			if credit, ok := stats.Credit(); ok {
@@ -717,6 +950,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, resp)
 		st.status = http.StatusOK
 		st.toks = completionTokens(resp)
+		st.ptoks = promptTokens(resp)
 		// 成本账本（非流式）：从聚合响应的 usage 取 credit 与 token 总数。
 		if credit, total, ok := usageCreditTotal(resp); ok {
 			h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, total)

@@ -65,5 +65,10 @@
     "enabled": true,
     "ttl": "30m",
     "gc_interval": "5m"
+  },
+  "dashboard": {
+    "user": "",
+    "pass": "",
+    "data_dir": ""
   }
 }

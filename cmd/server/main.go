@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -171,6 +172,25 @@ func main() {
 		log.Printf("夜猫子任务已启用：%v 点（task_runner.py ALL --yes --only black_cat）", cfg.Schedule.CatHours)
 	}
 
+	// 看板数据模块（可选）：未配置看板凭据时三者均为 nil → handler 既不注册看板路由，
+	// 也无出口记录开销（零回归）；配置了才建目录并启动后台落盘 goroutine。
+	// 数据目录缺省为 state_file 所在目录（./data），便于整目录备份。
+	var (
+		statsTrack *server.Stats
+		callTrack  *server.CallTrack
+		creditTrk  *server.CreditTrack
+	)
+	if dir := cfg.DashboardDataDir(); dir != "" {
+		statsTrack = server.NewStats(filepath.Join(dir, "stats.json"))
+		callTrack = server.NewCallTrack(filepath.Join(dir, "call_log.json"))
+		// 采样函数在 handler 建好后再注入（它需要 handler 的账号池与上游客户端），
+		// 首采在 20s 后，注入早于首采，不会出现空采样。
+		creditTrk = server.NewCreditTrack(filepath.Join(dir, "credits_snapshots.json"), nil)
+		defer statsTrack.Close()
+		defer callTrack.Close()
+		defer creditTrk.Close()
+	}
+
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
@@ -184,7 +204,18 @@ func main() {
 		MaxBodyBytes: int64(cfg.Server.MaxBodyMB) << 20, // MB → 字节
 		// global realm 开关（handler 侧第三道闸：modelList 据此决定是否列 global 名单）。
 		GlobalEnabled: cfg.Global.Enabled,
+		// 看板：凭据 + 三个数据模块（nil = 未启用 → 不注册任何看板路由）。
+		DashboardUser: cfg.Dashboard.User,
+		DashboardPass: cfg.Dashboard.Pass,
+		Stats:         statsTrack,
+		CallTrack:     callTrack,
+		CreditTrack:   creditTrk,
 	})
+	if creditTrk != nil {
+		// 积分快照采样口径复用 /credits 同一套聚合逻辑（UserResource）。
+		creditTrk.SetSampler(h.SampleCredits)
+		log.Printf("看板已启用：Basic Auth 用户 %q，数据目录 %s", cfg.Dashboard.User, cfg.DashboardDataDir())
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

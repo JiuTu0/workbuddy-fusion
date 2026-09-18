@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -124,6 +125,16 @@ type Config struct {
 		// 的积分被标记为"快过期"，选号优先消耗（issue:积分过期）。空/0 = 禁用分桶。
 		ExpiringSoon string `json:"expiring_soon"`
 	} `json:"pool"`
+
+	// Dashboard 内置看板（token 用量 / 积分快照 / 调用流水 / 账号池）。
+	// 账号与密码都非空才启用；任一为空 = 完全不注册看板路由，行为与无看板版本一致。
+	Dashboard struct {
+		User string `json:"user"`
+		Pass string `json:"pass"`
+		// DataDir 看板三份数据文件（stats.json / credits_snapshots.json / call_log.json）
+		// 的落盘目录；空 = 与 state_file 同目录（默认 ./data），便于整目录备份。
+		DataDir string `json:"data_dir"`
+	} `json:"dashboard"`
 
 	SessionSticky struct {
 		Enabled    bool   `json:"enabled"`     // 默认 true
@@ -276,6 +287,31 @@ func applyEnv(c *Config) {
 	if v := os.Getenv("WBF_EXPIRING_SOON"); v != "" {
 		c.Pool.ExpiringSoon = v
 	}
+	// 看板凭据/数据目录：容器部署常把凭据走 env 注入而不落盘进配置文件。
+	if v := os.Getenv("WBF_DASHBOARD_USER"); v != "" {
+		c.Dashboard.User = v
+	}
+	if v := os.Getenv("WBF_DASHBOARD_PASS"); v != "" {
+		c.Dashboard.Pass = v
+	}
+	if v := os.Getenv("WBF_DASHBOARD_DATA_DIR"); v != "" {
+		c.Dashboard.DataDir = v
+	}
+}
+
+// DashboardEnabled 报告看板是否启用（账号与密码都配置了才算启用）。
+// 单配一半不算：既避免"有页面没鉴权"，也避免"配了密码却打不开"的困惑。
+func (c *Config) DashboardEnabled() bool {
+	return c.Dashboard.User != "" && c.Dashboard.Pass != ""
+}
+
+// DashboardDataDir 返回看板数据目录（已 normalize）。未启用看板时返回空串，
+// 调用方据此跳过全部数据模块的构造。
+func (c *Config) DashboardDataDir() string {
+	if !c.DashboardEnabled() {
+		return ""
+	}
+	return c.Dashboard.DataDir
 }
 
 func (c *Config) normalize() error {
@@ -339,6 +375,17 @@ func (c *Config) normalize() error {
 	}
 	if !strings.HasPrefix(c.Listen, ":") && !strings.Contains(c.Listen, ":") {
 		c.Listen = ":" + c.Listen
+	}
+	// 看板数据目录：空 = 与 state_file 同目录（默认 ./data，整目录即可备份全部网关数据）。
+	// 仅在启用看板时补默认值：未启用时不构造任何数据模块，该字段无实际作用（零回归）。
+	if c.DashboardEnabled() {
+		if dir := strings.TrimSpace(c.Dashboard.DataDir); dir != "" {
+			c.Dashboard.DataDir = dir
+		} else if d := filepath.Dir(strings.TrimSpace(c.StateFile)); d != "" && d != "." {
+			c.Dashboard.DataDir = d
+		} else {
+			c.Dashboard.DataDir = "./data"
+		}
 	}
 	// 排程段归一（空数组回落默认、ActivityReportCount 归一、小时范围校验）
 	// 由 internal/config 统一实现，cmd/server 与 cmd/activity 共用同一份语义。

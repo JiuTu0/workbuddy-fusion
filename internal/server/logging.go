@@ -27,7 +27,13 @@ type chatStat struct {
 	uid    string // 完整 uid，展示时只取前 8 位
 	ttfb   time.Duration
 	toks   int // <0 表示 usage 缺失 → 显示 "-"
+	ptoks  int // prompt tokens；同 toks 口径，<0 表示 usage 缺失（仅供看板，不打印）
 	status int
+
+	// realm / nickname 供看板的用量与流水记录使用（双域部署时按域归集）；
+	// 表格日志本身仍打印 uid 前缀，不因看板新增字段而改变行格式。
+	realm    string
+	nickname string
 
 	logged bool
 }
@@ -38,7 +44,7 @@ func newChatStat(now time.Time, body []byte, stream bool) *chatStat {
 	if stream {
 		mode = "stream"
 	}
-	return &chatStat{start: now, model: parseModelFromBody(body), mode: mode, toks: -1}
+	return &chatStat{start: now, model: parseModelFromBody(body), mode: mode, toks: -1, ptoks: -1}
 }
 
 // done 幂等落一行表格日志。
@@ -76,6 +82,10 @@ func (s *chatStatsReader) TTFB() time.Duration { return s.ttfb }
 
 // Tokens 返回末帧 usage.completion_tokens 与是否缺失；无 usage 时 ok=false。
 func (s *chatStatsReader) Tokens() (int, bool) { return s.tokens, s.hasUsage }
+
+// PromptTokens 返回末帧 usage.prompt_tokens 与是否缺失；无 usage 时 ok=false。
+// 与 Tokens 同口径：看板统计需要 prompt/completion 分开累计。
+func (s *chatStatsReader) PromptTokens() (int, bool) { return s.prompt, s.hasUsage }
 
 // Credit 返回末帧 usage.credit（本次真实扣费）。ok=true 要求 usage 存在**且** credit
 // 字段显式出现——字段缺失时 ok=false（缺失≠0：不能把"缺观测"当"0 成本"写入账本，
@@ -154,6 +164,20 @@ func completionTokens(resp map[string]any) int {
 		return -1
 	}
 	v, ok := u["completion_tokens"].(float64)
+	if !ok {
+		return -1
+	}
+	return int(v)
+}
+
+// promptTokens 从聚合返回的响应中提取 usage.prompt_tokens；缺失返回 -1。
+// 与 completionTokens 同口径：缺失用负数表达"无观测"，不把缺字段当 0。
+func promptTokens(resp map[string]any) int {
+	u, ok := resp["usage"].(map[string]any)
+	if !ok {
+		return -1
+	}
+	v, ok := u["prompt_tokens"].(float64)
 	if !ok {
 		return -1
 	}

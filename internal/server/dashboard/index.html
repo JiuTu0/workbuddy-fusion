@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workbuddy-fusion 网关看板</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --line:#272c36;
+    --fg:#e6e9ef; --dim:#8b93a3; --accent:#4f9cf9; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --mono:'Cascadia Mono',Consolas,'JetBrains Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px}
+  header .sub{color:var(--dim);font-size:12px}
+  header .spacer{flex:1}
+  header button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px}
+  header button:hover{border-color:var(--accent)}
+  header .count{color:var(--dim);font-size:12px;font-family:var(--mono)}
+  main{padding:18px 22px 60px;max-width:1560px;margin:0 auto}
+  section{margin-bottom:22px}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin:0 0 10px;letter-spacing:.6px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .card .k{color:var(--dim);font-size:12px}
+  .card .v{font-family:var(--mono);font-size:20px;margin-top:4px}
+  .card .v small{font-size:12px;color:var(--dim);font-family:inherit}
+  .strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--dim);font-family:var(--mono)}
+  .chip b{color:var(--fg);font-weight:600}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--dim);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--panel)}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  tbody tr:hover{background:var(--panel2)}
+  .muted{color:var(--dim)}
+  .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+  .tag{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:0 6px;font-size:11px;color:var(--dim);font-family:var(--mono)}
+  .tag.cn{color:#7ec8ff;border-color:#2a4a66}
+  .tag.global{color:#c9a6ff;border-color:#463066}
+  .bar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;min-width:60px}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  .empty{color:var(--dim);font-size:13px;padding:10px 2px}
+  .scroll{max-height:340px;overflow:auto}
+  svg{display:block;width:100%;height:auto}
+  .foot{color:var(--dim);font-size:12px;margin-top:6px}
+  .gallery{display:flex;flex-wrap:wrap;gap:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>workbuddy-fusion 网关看板</h1>
+  <span class="sub">账号池 · 积分 · 用量 · 调用流水</span>
+  <span class="spacer"></span>
+  <span class="count" id="countdown">--</span>
+  <button id="refresh">立即刷新</button>
+</header>
+
+<main>
+  <div class="strip" id="strip"></div>
+
+  <section>
+    <h2>总览</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section>
+    <h2>Token 用量 · 按小时趋势</h2>
+    <div class="panel" id="hourChart"></div>
+  </section>
+
+  <section>
+    <h2>Token 用量 · 维度明细</h2>
+    <div class="grid2">
+      <div class="panel" id="byModel"></div>
+      <div class="panel" id="byRealm"></div>
+    </div>
+    <div class="panel" id="byUid" style="margin-top:16px"></div>
+  </section>
+
+  <section>
+    <h2>积分趋势</h2>
+    <div class="panel" id="creditChart"></div>
+    <div class="panel" id="creditTable" style="margin-top:16px"></div>
+  </section>
+
+  <section>
+    <h2>调用流水</h2>
+    <div class="panel" id="calls"></div>
+  </section>
+
+  <section>
+    <h2>账号池</h2>
+    <div class="panel" id="accounts"></div>
+  </section>
+
+  <section>
+    <h2>可用模型</h2>
+    <div class="panel" id="models"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const REFRESH_MS = 30000;      // 自动刷新周期
+const CALLS_LIMIT = 500;       // 调用流水默认拉取条数
+const CALLS_ROWS  = 300;       // 调用流水最多渲染行数
+
+let callLimit = CALLS_LIMIT;
+let nextAt = 0;
+
+/* ---------- 数据访问：全部走相对路径 api/... ---------- */
+
+function apiURL(path){
+  return new URL(path, window.location.origin).toString();
+}
+
+// jget 取 JSON；任何失败（接口不存在 / 401 / 网络错误）都静默回落 fallback，
+// 不打印控制台、不弹窗——看板对"网关尚未提供的接口"保持安静降级。
+async function jget(path, fallback){
+  try{
+    const r = await fetch(apiURL(path), {headers:{'Accept':'application/json'}, cache:'no-store'});
+    if(!r.ok) return fallback;
+    return await r.json();
+  }catch(e){ return fallback; }
+}
+
+/* ---------- 展示小工具 ---------- */
+
+const ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, c => ESC[c]); }
+
+function n(v){
+  const x = Number(v);
+  if(!isFinite(x)) return '-';
+  return x.toLocaleString('en-US');
+}
+
+function shortUID(uid){ return uid ? (uid.length > 10 ? uid.slice(0,8) + '…' : uid) : '-'; }
+
+function ts(sec){
+  const x = Number(sec);
+  if(!x) return '-';
+  const d = new Date(x * 1000);
+  const p = k => String(k).padStart(2,'0');
+  return p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function dur(sec){
+  const s = Number(sec);
+  if(!isFinite(s) || s <= 0) return '-';
+  if(s < 60) return s + 's';
+  if(s < 3600) return Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0') + 's';
+  return Math.floor(s/3600) + 'h' + String(Math.floor(s%3600/60)).padStart(2,'0') + 'm';
+}
+
+function statusClass(code){
+  const c = Number(code);
+  if(c >= 200 && c < 300) return 'ok';
+  if(c >= 400 && c < 500) return 'warn';
+  return 'bad';
+}
+
+function realmTag(realm){
+  if(!realm) return '<span class="tag">-</span>';
+  const cls = realm === 'cn' ? 'tag cn' : (realm === 'global' ? 'tag global' : 'tag');
+  return '<span class="' + cls + '">' + esc(realm) + '</span>';
+}
+
+function unavailable(what){
+  return '<div class="empty">' + esc(what) + '暂不可用（该接口未提供数据）</div>';
+}
+
+function dimBar(value, max){
+  const pct = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
+  return '<div class="bar"><i style="width:' + pct + '%"></i></div>';
+}
+
+/* ---------- 顶部状态条 ---------- */
+
+function renderStrip(status){
+  const el = document.getElementById('strip');
+  if(!status){
+    el.innerHTML = '<span class="chip">网关状态 <b>不可用</b></span>';
+    return;
+  }
+  const rt = status.realm_totals || {};
+  const realmChip = k => {
+    const v = rt[k];
+    if(!v) return '<span class="chip">' + k + ' <b>-</b></span>';
+    return '<span class="chip">' + k + ' 健康 <b>' + n(v.healthy) + '</b>/' + n(v.total) + '</span>';
+  };
+  el.innerHTML = [
+    '<span class="chip">服务 <b>' + esc(status.service || 'workbuddy-fusion') + '</b></span>',
+    realmChip('cn'),
+    realmChip('global'),
+    '<span class="chip">冷却 <b>' + n(status.cooling) + '</b></span>',
+    '<span class="chip">禁用 <b>' + n(status.disabled) + '</b></span>',
+    '<span class="chip">在途满载 <b>' + n(status.in_flight_full) + '</b></span>',
+    '<span class="chip">粘性会话 <b>' + n(status.sticky_sessions) + '</b></span>',
+    '<span class="chip">redis <b>' + esc(status.redis_mode || '-') + '</b></span>'
+  ].join('');
+}
+
+/* ---------- 总览卡片 ---------- */
+
+function renderCards(status, credits, stats, models){
+  const el = document.getElementById('cards');
+  const cards = [];
+  cards.push(['账号总数', status ? n(status.total) : '-', status ? '健康 ' + n(status.healthy) : '']);
+  cards.push(['可用模型', models ? n((models.data || []).length) : '-', '']);
+  const cu = credits && credits.total ? credits.total : null;
+  cards.push(['积分总余额', cu ? n(cu.remain) : '-', cu ? '可读账号 ' + n(cu.ok) + '/' + n(cu.accounts) : '']);
+  const t = stats && stats.total ? stats.total : null;
+  cards.push(['累计 Token', t ? n(t.total) : '-', t ? '请求 ' + n(t.requests) : '']);
+  cards.push(['输入 Token', t ? n(t.prompt) : '-', '']);
+  cards.push(['输出 Token', t ? n(t.completion) : '-', '']);
+  el.innerHTML = cards.map(c =>
+    '<div class="card"><div class="k">' + esc(c[0]) + '</div><div class="v">' + esc(c[1]) +
+    (c[2] ? ' <small>' + esc(c[2]) + '</small>' : '') + '</div></div>'
+  ).join('');
+}
+
+/* ---------- 图表：纯 SVG，无外部依赖 ---------- */
+
+function barChart(hourly){
+  if(!hourly || !hourly.length) return unavailable('用量趋势');
+  const rows = hourly.slice(-24);
+  const W = 1000, H = 180, PADL = 44, PADB = 26, PADT = 10;
+  const max = Math.max(1, ...rows.map(r => Number(r.total) || 0));
+  const bw = (W - PADL - 8) / rows.length;
+  let bars = '', labels = '';
+  rows.forEach((r, i) => {
+    const v = Number(r.total) || 0;
+    const h = Math.max(1, (H - PADT - PADB) * v / max);
+    const x = PADL + i * bw;
+    const y = H - PADB - h;
+    bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(2, bw - 4).toFixed(1) +
+            '" height="' + h.toFixed(1) + '" rx="2" fill="#4f9cf9"><title>' + esc(r.hour) + ' · ' + n(v) + ' tok</title></rect>';
+    if(i % 4 === 0){
+      const hh = String(r.hour || '').slice(-2);
+      labels += '<text x="' + (x + bw/2).toFixed(1) + '" y="' + (H - 8) + '" fill="#8b93a3" font-size="11" text-anchor="middle">' + esc(hh) + ':00</text>';
+    }
+  });
+  const grid = [0, 0.5, 1].map(f => {
+    const y = H - PADB - (H - PADT - PADB) * f;
+    return '<line x1="' + PADL + '" x2="' + W + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="#272c36"/>' +
+           '<text x="' + (PADL - 6) + '" y="' + (y + 4).toFixed(1) + '" fill="#8b93a3" font-size="11" text-anchor="end">' + n(Math.round(max * f)) + '</text>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="height:180px">' + grid + bars + labels + '</svg>' +
+         '<div class="foot">最近 ' + rows.length + ' 个小时桶 · 悬停可见精确值 · 单位 token</div>';
+}
+
+function lineChart(snaps){
+  if(!snaps || !snaps.length) return unavailable('积分趋势');
+  let rows = snaps.slice(-288); // 最多 24h @5min
+  const W = 1000, H = 180, PADL = 56, PADB = 26, PADT = 10;
+  const vals = rows.map(r => Number(r.remain) || 0);
+  let min = Math.min(...vals), max = Math.max(...vals);
+  if(min === max){ min = min - 1; max = max + 1; }
+  const span = max - min;
+  const x = i => PADL + (W - PADL - 8) * (rows.length === 1 ? 0.5 : i / (rows.length - 1));
+  const y = v => PADT + (H - PADT - PADB) * (1 - (v - min) / span);
+  const pts = vals.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const area = PADL + ',' + (H - PADB) + ' ' + pts + ' ' + x(rows.length - 1).toFixed(1) + ',' + (H - PADB);
+  const grid = [0, 0.5, 1].map(f => {
+    const gy = PADT + (H - PADT - PADB) * f;
+    return '<line x1="' + PADL + '" x2="' + W + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#272c36"/>' +
+           '<text x="' + (PADL - 6) + '" y="' + (gy + 4).toFixed(1) + '" fill="#8b93a3" font-size="11" text-anchor="end">' + n(Math.round(max - span * f)) + '</text>';
+  }).join('');
+  const first = rows[0], last = rows[rows.length - 1];
+  const delta = (Number(last.remain) || 0) - (Number(first.remain) || 0);
+  const mins = Math.max(1, Math.round((Number(last.ts) - Number(first.ts)) / 60));
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="height:180px">' + grid +
+         '<polygon points="' + area + '" fill="rgba(79,156,249,.14)"/>' +
+         '<polyline points="' + pts + '" fill="none" stroke="#4f9cf9" stroke-width="2"/>' +
+         '<text x="' + (PADL + 2) + '" y="' + (H - 8) + '" fill="#8b93a3" font-size="11">' + esc(ts(first.ts)) + '</text>' +
+         '<text x="' + (W - 4) + '" y="' + (H - 8) + '" fill="#8b93a3" font-size="11" text-anchor="end">' + esc(ts(last.ts)) + '</text>' +
+         '</svg>' +
+         '<div class="foot">共 ' + rows.length + ' 个采样点 · 区间变化 <b class="' + (delta < 0 ? 'bad' : 'ok') + '">' +
+         (delta >= 0 ? '+' : '') + n(delta) + '</b> · 近 ' + mins + ' 分钟 · 单位积分</div>';
+}
+
+/* ---------- 用量维度表 ---------- */
+
+function dimTable(rows, head, maxRows){
+  if(!rows || !rows.length) return unavailable(head);
+  const list = rows.slice(0, maxRows || 20);
+  const max = Math.max(1, ...list.map(r => Number(r.total) || 0));
+  const body = list.map(r =>
+    '<tr><td>' + esc(r.name) + '</td>' +
+    '<td class="num">' + n(r.requests) + '</td>' +
+    '<td class="num">' + n(r.prompt) + '</td>' +
+    '<td class="num">' + n(r.completion) + '</td>' +
+    '<td class="num">' + n(r.total) + '</td>' +
+    '<td>' + dimBar(Number(r.total) || 0, max) + '</td></tr>'
+  ).join('');
+  return '<table><thead><tr><th>' + esc(head) + '</th><th class="num">请求</th><th class="num">输入</th>' +
+         '<th class="num">输出</th><th class="num">合计</th><th>占比</th></tr></thead><tbody>' + body + '</tbody></table>' +
+         (rows.length > list.length ? '<div class="foot">仅显示前 ' + list.length + ' 项（共 ' + rows.length + ' 项）</div>' : '');
+}
+
+/* ---------- 积分余额表 ---------- */
+
+function creditTable(credits, status){
+  const byUID = {};
+  ((status && status.accounts) || []).forEach(a => { byUID[a.uid] = a; });
+  const list = (credits && credits.accounts) || [];
+  if(!list.length) return unavailable('积分余额');
+  const rows = list.slice().sort((a, b) => (Number(b.remain) || 0) - (Number(a.remain) || 0)).map(a => {
+    const st = byUID[a.uid] || {};
+    const realm = a.realm || st.realm || '';
+    return '<tr><td>' + esc(shortUID(a.uid)) + '</td>' +
+      '<td>' + esc(a.nickname || st.nickname || '-') + '</td>' +
+      '<td>' + realmTag(realm) + '</td>' +
+      '<td class="num">' + (a.remain == null ? '-' : n(a.remain)) + '</td>' +
+      '<td class="num">' + n(st.credits) + '</td>' +
+      '<td>' + (a.ok ? '<span class="ok">正常</span>' : '<span class="bad">' + esc(a.error || '读取失败') + '</span>') + '</td>' +
+      '<td class="num">' + (a.expires_in_sec == null ? '-' : dur(a.expires_in_sec)) + '</td></tr>';
+  }).join('');
+  const t = (credits && credits.total) || {};
+  return '<table><thead><tr><th>账号</th><th>昵称</th><th>域</th><th class="num">实时余额</th>' +
+         '<th class="num">池内余额</th><th>读取</th><th class="num">token 剩余</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+         '<div class="foot">合计 <b>' + n(t.remain) + '</b> · 可读 ' + n(t.ok) + '/' + n(t.accounts) + ' 个账号</div>';
+}
+
+/* ---------- 调用流水 ---------- */
+
+function callsTable(data){
+  if(!data || !Array.isArray(data.calls)) return unavailable('调用流水');
+  const list = data.calls.slice(-CALLS_ROWS).reverse();
+  if(!list.length) return '<div class="empty">暂无调用记录</div>';
+  const rows = list.map(c =>
+    '<tr><td class="muted">' + esc(ts(c.ts)) + '</td>' +
+    '<td>' + realmTag(c.realm) + '</td>' +
+    '<td>' + esc(c.model) + '</td>' +
+    '<td>' + esc(c.mode) + '</td>' +
+    '<td class="' + statusClass(c.status) + '">' + n(c.status) + '</td>' +
+    '<td>' + esc(shortUID(c.uid)) + '</td>' +
+    '<td class="muted">' + esc(c.nickname || '-') + '</td></tr>'
+  ).join('');
+  return '<div class="scroll"><table><thead><tr><th>时间</th><th>域</th><th>模型</th><th>模式</th>' +
+         '<th>状态</th><th>账号</th><th>昵称</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+         '<div class="foot">显示最近 ' + list.length + ' 条 · 网关保留 ' + n(data.total) + ' 条 · 拉取上限 ' + n(data.limit) + '</div>';
+}
+
+/* ---------- 账号池 ---------- */
+
+function accountsTable(status){
+  const list = (status && status.accounts) || [];
+  if(!list.length) return '<div class="empty">账号池为空</div>';
+  const rows = list.map(a => {
+    let state = '<span class="ok">正常</span>';
+    if(a.disabled) state = '<span class="bad">禁用</span>';
+    else if(a.cooling) state = '<span class="warn">冷却</span>';
+    const reason = a.disabled_reason || a.reason || '';
+    return '<tr><td>' + esc(shortUID(a.uid)) + '</td>' +
+      '<td>' + esc(a.nickname || '-') + '</td>' +
+      '<td>' + realmTag(a.realm) + '</td>' +
+      '<td class="num">' + n(a.credits) + '</td>' +
+      '<td>' + state + '</td>' +
+      '<td class="num">' + (a.cooling ? dur(a.cool_remaining_sec) : '-') + '</td>' +
+      '<td class="num">' + n(a.in_flight) + '</td>' +
+      '<td class="num">' + n(a.success_count) + '/' + n(a.err_total) + '</td>' +
+      '<td class="muted">' + esc(reason || a.cool_kind || '-') + '</td></tr>';
+  }).join('');
+  return '<div class="scroll"><table><thead><tr><th>账号</th><th>昵称</th><th>域</th><th class="num">余额</th>' +
+         '<th>状态</th><th class="num">冷却剩余</th><th class="num">在途</th><th class="num">成功/错误</th>' +
+         '<th>说明</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---------- 可用模型 ---------- */
+
+function modelsPanel(models){
+  const list = (models && models.data) || [];
+  if(!list.length) return unavailable('模型列表');
+  return '<div class="gallery">' + list.map(m => '<span class="chip">' + esc(m.id) + '</span>').join('') + '</div>' +
+         '<div class="foot">共 ' + list.length + ' 个模型（来自上游实时目录）</div>';
+}
+
+/* ---------- 刷新循环 ---------- */
+
+async function refreshAll(){
+  const [status, credits, stats, history, calls, models] = await Promise.all([
+    jget('api/status', null),
+    jget('api/credits', null),
+    jget('api/stats', null),
+    jget('api/credits/history', null),
+    jget('api/calls?limit=' + encodeURIComponent(callLimit), null),
+    jget('api/v1/models', null)
+  ]);
+
+  renderStrip(status);
+  renderCards(status, credits, stats, models);
+
+  document.getElementById('hourChart').innerHTML = barChart(stats && stats.hourly);
+  document.getElementById('byModel').innerHTML = '<div class="foot" style="margin:0 0 8px">按模型</div>' +
+    dimTable(stats && stats.by_model, '模型', 20);
+  document.getElementById('byRealm').innerHTML = '<div class="foot" style="margin:0 0 8px">按域（cn / global）</div>' +
+    dimTable(stats && stats.by_realm, '域', 10);
+  document.getElementById('byUid').innerHTML = '<div class="foot" style="margin:0 0 8px">按账号</div>' +
+    dimTable(stats && stats.by_uid, '账号', 20);
+
+  document.getElementById('creditChart').innerHTML = lineChart(history && history.snapshots);
+  document.getElementById('creditTable').innerHTML = creditTable(credits, status);
+  document.getElementById('calls').innerHTML = callsTable(calls);
+  document.getElementById('accounts').innerHTML = accountsTable(status);
+  document.getElementById('models').innerHTML = modelsPanel(models);
+}
+
+function tick(){
+  const left = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+  document.getElementById('countdown').textContent = left + 's 后自动刷新';
+  if(left <= 0){
+    nextAt = Date.now() + REFRESH_MS;
+    refreshAll();
+  }
+}
+
+document.getElementById('refresh').addEventListener('click', () => {
+  nextAt = Date.now() + REFRESH_MS;
+  refreshAll();
+});
+
+refreshAll();
+nextAt = Date.now() + REFRESH_MS;
+setInterval(tick, 1000);
+tick();
+</script>
+</body>
+</html>
