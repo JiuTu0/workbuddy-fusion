@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 2be897fd585fdd902801bb283cacdf4a_31b5820fb70111f1a38a525400248c00
+    ReservedCode1: 9JvBgTZ/pbDn4HerUV1asOQjpB2PpAOug322xY5tk+T6tRL4ENtjeKSkplX/4+IGMbj6tdkql9YMbkYMk7RxthqDA6+xEJvLx37IRK2bqFuT1UVnzBwwACh983dB2QBS6WIEw1Y5UAU+XiS1BHOrrum8ZL7QUW7yqmqhu7VtraOdfGU7Yat0ucmF40A=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 2be897fd585fdd902801bb283cacdf4a_31b5820fb70111f1a38a525400248c00
+    ReservedCode2: 9JvBgTZ/pbDn4HerUV1asOQjpB2PpAOug322xY5tk+T6tRL4ENtjeKSkplX/4+IGMbj6tdkql9YMbkYMk7RxthqDA6+xEJvLx37IRK2bqFuT1UVnzBwwACh983dB2QBS6WIEw1Y5UAU+XiS1BHOrrum8ZL7QUW7yqmqhu7VtraOdfGU7Yat0ucmF40A=
+---
+
 <h1 align="center">workbuddy-fusion</h1>
 
 <p align="center">
@@ -79,6 +90,7 @@ workbuddy-fusion 是一个自托管的 **OpenAI 兼容网关**，把 `CodeBuddy`
 - **单页自带，零外部依赖** — `internal/server/dashboard/index.html` 以 `go:embed` 打进二进制，网关本体直接托管页面与数据接口，不需要 nginx 或额外静态目录；页面随二进制走，不会出现"页面比后端旧"的错配。图表为手写 SVG，不引 CDN 或前端框架，内网 / 离线环境照常渲染
 - **看板凭据与 API 密钥分离** — 页面与 `/api/*` 走 HTTP Basic Auth（`dashboard.user` / `dashboard.pass`），与网关 `api_key` 是两套凭据：把看板交给运维同事看，不必连带交出 API 密钥；页面里也不下发 `api_key`。未配置凭据时看板路由完全不注册，行为与"没有看板"的版本一致
 - **四块视图** — ①账号池：状态 / 域 / 余额 / 冷却剩余 / 在途 / 成功错误计数；②积分趋势：5 分钟采样折线 + 逐号实时余额表；③Token 用量：小时柱状 + 按模型 / 按域 / 按账号明细；④调用流水：时间 / 域 / 模型 / 模式 / 状态码 / 账号。页面 30 秒自动刷新，也可手动立即刷新
+- **API 接入信息** — 看板顶部「API 接入信息」区块展示第三方接入网关所需的 `base_url`（`http://<host>:7863/v1`，host 跟随当前访问地址）、`api_key`（支持一键复制；未配置时提示网关未鉴权）与模型使用说明（OpenAI 兼容；`model` 填 `cn:` / `global:` 前缀账号 ID 选择域，`/v1/models` 可查列表）。数据来自受看板 Basic Auth 保护的 `GET /api/info`；未配置看板凭据时不注册该端点
 - **本地落盘，随目录备份** — `stats.json`（用量累计，小时桶保留 14 天）、`call_log.json`（调用流水，保留最近 5000 条）、`credits_snapshots.json`（积分快照，5 分钟一点、保留 2016 点）；三者与 `state.json` 同目录，整目录备份即可
 
 访问方式：浏览器打开 `http://<host>:7863/`，用 `dashboard.user` / `dashboard.pass` 登录。
@@ -317,3 +329,4 @@ scripts/        # 运维与任务脚本（task_runner.py、定时任务封装等
 - 再分发（源码或二进制形式）时，须保留本项目的 MIT 版权声明与许可声明
 - 本项目不授予任何 CodeBuddy 接口或服务的权利；使用者仍需自行遵守平台服务条款
 - 本项目的使用同时受上方**免责声明**约束；如免责声明与 MIT License 存在不一致，以免责声明为准
+*（内容由AI生成，仅供参考）*

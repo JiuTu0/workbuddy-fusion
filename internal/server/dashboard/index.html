@@ -51,6 +51,66 @@
   svg{display:block;width:100%;height:auto}
   .foot{color:var(--dim);font-size:12px;margin-top:6px}
   .gallery{display:flex;flex-wrap:wrap;gap:6px}
+  /* ---- API 接入信息 ---- */
+  .info-row{display:flex;align-items:center;gap:10px;padding:7px 2px;border-bottom:1px solid var(--line)}
+  .info-row:last-child{border-bottom:none}
+  .info-row .k{color:var(--dim);font-size:12px;min-width:90px;flex:none}
+  .info-row .v{font-family:var(--mono);font-size:13px;word-break:break-all;user-select:all}
+  .copybtn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer;flex:none}
+  .copybtn:hover{border-color:var(--accent)}
+  .copybtn.ok{color:var(--ok);border-color:var(--ok)}
+  .info-note{margin-top:10px;padding:10px 12px;background:var(--panel2);border-radius:6px;font-size:13px;line-height:1.7}
+  .info-note .line{color:var(--dim)}
+  .info-note .line b{color:var(--fg)}
+  /* ---- 账号管理：弹窗 / 选项卡 / 行内按钮 ---- */
+  .gbtn{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:6px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:600}
+  .gbtn:hover{filter:brightness(1.08)}
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal-mask.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:100%;max-width:560px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  .modal-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .modal-head h3{margin:0;font-size:15px;font-weight:600}
+  .modal-head .sub{color:var(--dim);font-size:12px}
+  .modal-close{margin-left:auto;background:none;border:none;color:var(--dim);font-size:22px;line-height:1;cursor:pointer;padding:0 4px}
+  .modal-close:hover{color:var(--fg)}
+  .modal-body{padding:16px 18px;overflow-y:auto}
+  .modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tab{background:var(--panel2);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px}
+  .tab.active{color:var(--fg);border-color:var(--accent)}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .field{margin-bottom:12px}
+  .field label{display:block;color:var(--dim);font-size:12px;margin-bottom:6px}
+  .field select,.field textarea,.field input[type=file]{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:13px;font-family:var(--mono)}
+  .field textarea{min-height:150px;resize:vertical}
+  .field .hint{color:var(--dim);font-size:12px;margin-top:6px}
+  .btn{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .rowbtn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer;margin-right:6px}
+  .rowbtn:hover{border-color:var(--accent)}
+  .rowbtn:disabled{color:var(--dim);cursor:not-allowed;opacity:.5}
+  .rowbtn.revive{color:var(--warn)}
+  .rowbtn.revive:hover{border-color:var(--warn)}
+  .rowbtn.del{color:var(--bad)}
+  .rowbtn.del:hover{border-color:var(--bad)}
+  .oauth-status{margin-top:12px;padding:10px 12px;border-radius:6px;background:var(--panel2);font-size:13px;word-break:break-all}
+  .oauth-status .url{font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all}
+  .oauth-status.ok{color:var(--ok)}
+  .oauth-status.err{color:var(--bad)}
+  .imp-sum{margin-bottom:10px;font-size:13px}
+  .imp-sum b.ok{color:var(--ok)}
+  .imp-sum b.bad{color:var(--bad)}
+  .imp-list{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+  .imp-row{display:flex;gap:10px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--line);font-size:13px;font-family:var(--mono)}
+  .imp-row:last-child{border-bottom:none}
+  .imp-row .st{font-weight:600;min-width:44px}
+  .imp-row.ok .st{color:var(--ok)}
+  .imp-row.fail .st{color:var(--bad)}
+  .imp-row .msg{color:var(--dim);font-size:12px;word-break:break-all}
 </style>
 </head>
 <body>
@@ -59,11 +119,17 @@
   <span class="sub">账号池 · 积分 · 用量 · 调用流水</span>
   <span class="spacer"></span>
   <span class="count" id="countdown">--</span>
+  <button id="addAcctBtn" class="gbtn">+ 添加账号</button>
   <button id="refresh">立即刷新</button>
 </header>
 
 <main>
   <div class="strip" id="strip"></div>
+
+  <section>
+    <h2>API 接入信息</h2>
+    <div class="panel" id="apiInfo"></div>
+  </section>
 
   <section>
     <h2>总览</h2>
@@ -105,6 +171,67 @@
     <div class="panel" id="models"></div>
   </section>
 </main>
+
+<!-- 添加账号弹窗：OAuth 授权 / 粘贴 JSON 导入 -->
+<div class="modal-mask" id="addModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>添加账号</h3>
+      <span class="sub">OAuth 授权或粘贴 JSON 批量导入</span>
+      <button class="modal-close" id="addClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <button class="tab active" data-tab="oauth">① OAuth 授权</button>
+        <button class="tab" data-tab="import">② 粘贴 JSON / 选文件导入</button>
+      </div>
+      <div class="tab-panel active" id="panel-oauth">
+        <div class="field">
+          <label>登录域（realm）</label>
+          <select id="oauthRealm">
+            <option value="cn">cn（腾讯云 Copilot）</option>
+            <option value="global">global（WorkBuddy AI）</option>
+          </select>
+          <div class="hint">凭证不会经过浏览器，只在网关侧落盘。</div>
+        </div>
+        <button class="btn primary" id="oauthStart">生成授权链接</button>
+        <div class="oauth-status" id="oauthStatus" style="display:none"></div>
+      </div>
+      <div class="tab-panel" id="panel-import">
+        <div class="field">
+          <label>粘贴 JSON（单个对象 / 数组 / {"accounts":[...]} 均可）</label>
+          <textarea id="importText" placeholder='[{"accessToken":"...","uid":"..."}]'></textarea>
+          <div class="hint">单条出错不影响其他条目；成功逐条绿、失败逐条红。</div>
+        </div>
+        <div class="field">
+          <label>或选择文件（.json，可多选）</label>
+          <input type="file" id="importFiles" accept=".json,application/json" multiple>
+        </div>
+        <button class="btn primary" id="importRun">开始导入</button>
+        <div class="imp-sum" id="impSum" style="display:none"></div>
+        <div class="imp-list" id="impList" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除账号确认弹窗（软删除提示） -->
+<div class="modal-mask" id="delModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-head">
+      <h3>删除账号</h3>
+      <button class="modal-close" id="delClose">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0 0 10px">确定删除账号 <b id="delUid"></b>？</p>
+      <p class="muted" style="margin:0">凭证文件将移入 <span class="tag">auths/.deleted/</span>（软删除），账号立即从池中移除；误删可手动拷回后重启恢复。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="delCancel">取消</button>
+      <button class="btn danger" id="delConfirm">确认删除</button>
+    </div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -361,6 +488,8 @@ function accountsTable(status){
     if(a.disabled) state = '<span class="bad">禁用</span>';
     else if(a.cooling) state = '<span class="warn">冷却</span>';
     const reason = a.disabled_reason || a.reason || '';
+    const action = '<button class="rowbtn revive" data-revive="' + esc(a.uid) + '"' + (a.disabled ? '' : ' disabled') + '>复活</button>' +
+      '<button class="rowbtn del" data-del="' + esc(a.uid) + '" data-del-nick="' + esc(a.nickname || '') + '">删除</button>';
     return '<tr><td>' + esc(shortUID(a.uid)) + '</td>' +
       '<td>' + esc(a.nickname || '-') + '</td>' +
       '<td>' + realmTag(a.realm) + '</td>' +
@@ -369,11 +498,12 @@ function accountsTable(status){
       '<td class="num">' + (a.cooling ? dur(a.cool_remaining_sec) : '-') + '</td>' +
       '<td class="num">' + n(a.in_flight) + '</td>' +
       '<td class="num">' + n(a.success_count) + '/' + n(a.err_total) + '</td>' +
-      '<td class="muted">' + esc(reason || a.cool_kind || '-') + '</td></tr>';
+      '<td class="muted">' + esc(reason || a.cool_kind || '-') + '</td>' +
+      '<td>' + action + '</td></tr>';
   }).join('');
   return '<div class="scroll"><table><thead><tr><th>账号</th><th>昵称</th><th>域</th><th class="num">余额</th>' +
          '<th>状态</th><th class="num">冷却剩余</th><th class="num">在途</th><th class="num">成功/错误</th>' +
-         '<th>说明</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+         '<th>说明</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 /* ---------- 可用模型 ---------- */
@@ -385,20 +515,287 @@ function modelsPanel(models){
          '<div class="foot">共 ' + list.length + ' 个模型（来自上游实时目录）</div>';
 }
 
+/* ---------- API 接入信息 ---------- */
+
+// copyText 复制文本到剪贴板：优先 Clipboard API，失败/不支持时回退 execCommand。
+// 成功后在按钮上短暂显示「已复制」反馈。
+function copyText(txt, btn){
+  const done = () => {
+    const old = btn.textContent;
+    btn.textContent = '已复制';
+    btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('ok'); }, 1400);
+  };
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){}
+    document.body.removeChild(ta);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(fallback);
+  }else{ fallback(); }
+}
+
+// renderInfo 渲染「API 接入信息」：base_url / api_key（带一键复制）与使用说明。
+// 接口不可用（未注册 / 失败）时静默降级为占位文案，与其它区块一致。
+function renderInfo(info){
+  const el = document.getElementById('apiInfo');
+  if(!info){
+    el.innerHTML = unavailable('接入信息');
+    return;
+  }
+  const key = info.api_key_set ? (info.api_key || '') : '';
+  const keyHTML = info.api_key_set
+    ? '<span class="v">' + esc(key) + '</span><button class="copybtn" data-copy="apikey">复制</button>'
+    : '<span class="v muted">未配置（网关未开启鉴权，客户端可不带 Authorization）</span>';
+  const rows =
+    '<div class="info-row"><span class="k">base_url</span>' +
+      '<span class="v">' + esc(info.base_url || '-') + '</span>' +
+      '<button class="copybtn" data-copy="baseurl">复制</button></div>' +
+    '<div class="info-row"><span class="k">api_key</span>' + keyHTML + '</div>';
+  const notes = '<div class="info-note">' +
+    (info.instructions || []).map(l => '<div class="line">' + esc(l) + '</div>').join('') +
+    '</div>';
+  el.innerHTML = rows + notes;
+  el.querySelectorAll('[data-copy]').forEach(b => {
+    b.addEventListener('click', () => {
+      copyText(b.dataset.copy === 'baseurl' ? (info.base_url || '') : key, b);
+    });
+  });
+}
+
+/* ---------- 账号管理（OAuth 添加 / JSON 导入 / 复活 / 删除） ---------- */
+
+let addSession = null;   // 当前 OAuth 会话 id
+let addTimer = null;     // 轮询定时器
+let delUID = null;       // 待删除账号 uid
+
+// stopPoll 停止登录轮询（关弹窗 / 成功 / 失败 / 超时都必须调，否则弹窗关了还在打接口）。
+function stopPoll(){
+  if(addTimer){ clearInterval(addTimer); addTimer = null; }
+  addSession = null;
+}
+
+function openAddModal(){
+  addSession = null;
+  const box = document.getElementById('oauthStatus');
+  box.style.display = 'none';
+  box.className = 'oauth-status';
+  document.getElementById('oauthStart').disabled = false;
+  document.getElementById('importText').value = '';
+  document.getElementById('importFiles').value = '';
+  document.getElementById('impSum').style.display = 'none';
+  document.getElementById('impList').style.display = 'none';
+  document.getElementById('addModal').classList.add('open');
+}
+
+function closeAddModal(){
+  stopPoll();
+  document.getElementById('addModal').classList.remove('open');
+}
+
+function switchAddTab(name){
+  document.querySelectorAll('#addModal .tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  document.getElementById('panel-oauth').classList.toggle('active', name === 'oauth');
+  document.getElementById('panel-import').classList.toggle('active', name === 'import');
+}
+
+async function startOAuth(){
+  const btn = document.getElementById('oauthStart');
+  const box = document.getElementById('oauthStatus');
+  btn.disabled = true;
+  box.style.display = 'block';
+  box.className = 'oauth-status';
+  box.innerHTML = '正在请求授权链接…';
+  try{
+    const realm = document.getElementById('oauthRealm').value;
+    const r = await fetch(apiURL('api/accounts/login/start'), {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify({realm: realm}),
+      cache:'no-store'
+    });
+    const j = await r.json();
+    if(!r.ok){ throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); }
+    addSession = j.id;
+    box.className = 'oauth-status';
+    box.innerHTML = '请在浏览器打开以下链接完成授权（域：' + esc(j.realm || realm) + '）：' +
+      '<div class="url"><a href="' + esc(j.auth_url) + '" target="_blank" rel="noopener">' + esc(j.auth_url) + '</a></div>' +
+      '<div class="hint" style="margin-top:8px">正在自动轮询登录结果…</div>';
+    pollLogin();
+  }catch(e){
+    box.className = 'oauth-status err';
+    box.innerHTML = '发起登录失败：' + esc(e.message || e);
+    btn.disabled = false;
+  }
+}
+
+async function pollLogin(){
+  if(addTimer) clearInterval(addTimer);
+  addTimer = setInterval(async () => {
+    if(!addSession){ stopPoll(); return; }
+    try{
+      const r = await fetch(apiURL('api/accounts/login/poll?id=' + encodeURIComponent(addSession)), {headers:{'Accept':'application/json'}, cache:'no-store'});
+      const j = await r.json();
+      if(!r.ok){ throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); }
+      const box = document.getElementById('oauthStatus');
+      if(j.status === 'done'){
+        stopPoll();
+        box.className = 'oauth-status ok';
+        box.innerHTML = '添加成功：' + esc((j.account && (j.account.nickname || j.account.uid)) || '') +
+          '（uid ' + esc((j.account && j.account.uid) || '') + '）';
+        document.getElementById('oauthStart').disabled = false;
+        setTimeout(() => { closeAddModal(); refreshAll(); }, 900);
+      }else if(j.status === 'failed'){
+        stopPoll();
+        box.className = 'oauth-status err';
+        box.innerHTML = '登录失败：' + esc(j.error || '未知错误');
+        document.getElementById('oauthStart').disabled = false;
+      }
+      // pending：继续轮询
+    }catch(e){
+      stopPoll();
+      const box = document.getElementById('oauthStatus');
+      box.className = 'oauth-status err';
+      box.innerHTML = '轮询中断：' + esc(e.message || e) + '（可关闭弹窗重新发起）';
+      document.getElementById('oauthStart').disabled = false;
+    }
+  }, 2500);
+}
+
+// readImportFiles 读取用户选中的文件，合并填入文本框。
+async function readImportFiles(files){
+  const parts = [];
+  for(const f of files){
+    try{ parts.push(await f.text()); }catch(e){ /* 单个文件读不了就跳过 */ }
+  }
+  if(!parts.length) return;
+  const ta = document.getElementById('importText');
+  ta.value = ta.value.trim() + (ta.value.trim() ? '\n' : '') + parts.join('\n');
+}
+
+async function runImport(){
+  const ta = document.getElementById('importText');
+  const body = ta.value.trim();
+  if(!body) return;
+  const btn = document.getElementById('importRun');
+  btn.disabled = true;
+  try{
+    const r = await fetch(apiURL('api/accounts/import'), {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: body,
+      cache:'no-store'
+    });
+    const j = await r.json();
+    if(!r.ok){ throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); }
+    renderImportResult(j);
+    if((j.imported || 0) > 0) setTimeout(refreshAll, 300);
+  }catch(e){
+    const sum = document.getElementById('impSum');
+    sum.style.display = 'block';
+    sum.innerHTML = '<span class="bad">导入请求失败：' + esc(e.message || e) + '</span>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// renderImportResult 逐条渲染：成功绿 / 失败红。
+function renderImportResult(data){
+  const sum = document.getElementById('impSum');
+  const list = document.getElementById('impList');
+  sum.style.display = 'block';
+  sum.innerHTML = '成功 <b class="ok">' + (data.imported || 0) + '</b> 条 · 失败 <b class="bad">' + (data.failed || 0) + '</b> 条 · 共 ' + (data.total || 0) + ' 条';
+  list.style.display = 'block';
+  list.innerHTML = ((data.results || []).map(res => {
+    const ok = !!res.ok;
+    return '<div class="imp-row ' + (ok ? 'ok' : 'fail') + '">' +
+      '<span class="st">' + (ok ? '成功' : '失败') + '</span>' +
+      '<span>' + esc(res.uid || '-') + '</span>' +
+      (ok ? '<span class="msg">' + esc(res.nickname || '') + '</span>' : '<span class="msg">' + esc(res.error || '') + '</span>') +
+      '</div>';
+  }).join('')) || '<div class="empty">无结果</div>';
+}
+
+function openDelModal(uid, nick){
+  delUID = uid;
+  document.getElementById('delUid').textContent = (nick ? nick + '（' : '') + uid + (nick ? '）' : '');
+  document.getElementById('delModal').classList.add('open');
+}
+
+function closeDelModal(){
+  delUID = null;
+  document.getElementById('delModal').classList.remove('open');
+}
+
+async function confirmDelete(){
+  if(!delUID) return;
+  const btn = document.getElementById('delConfirm');
+  btn.disabled = true;
+  try{
+    const r = await fetch(apiURL('api/accounts/' + encodeURIComponent(delUID)), {method:'DELETE', headers:{'Accept':'application/json'}, cache:'no-store'});
+    const j = await r.json();
+    if(!r.ok){ throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); }
+    closeDelModal();
+    refreshAll();
+  }catch(e){
+    alert('删除失败：' + (e.message || e));
+    closeDelModal();
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function reviveAccount(uid){
+  try{
+    const r = await fetch(apiURL('api/accounts/' + encodeURIComponent(uid) + '/revive'), {method:'POST', headers:{'Accept':'application/json'}, cache:'no-store'});
+    const j = await r.json();
+    if(!r.ok){ throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); }
+    refreshAll();
+  }catch(e){
+    alert('复活失败：' + (e.message || e));
+  }
+}
+
+document.getElementById('addAcctBtn').addEventListener('click', openAddModal);
+document.getElementById('addClose').addEventListener('click', closeAddModal);
+document.querySelectorAll('#addModal .tab').forEach(b => b.addEventListener('click', () => switchAddTab(b.dataset.tab)));
+document.getElementById('oauthStart').addEventListener('click', startOAuth);
+document.getElementById('importFiles').addEventListener('change', e => readImportFiles(Array.from(e.target.files || [])));
+document.getElementById('importRun').addEventListener('click', runImport);
+document.getElementById('delClose').addEventListener('click', closeDelModal);
+document.getElementById('delCancel').addEventListener('click', closeDelModal);
+document.getElementById('delConfirm').addEventListener('click', confirmDelete);
+document.addEventListener('click', e => {
+  const rv = e.target.closest('[data-revive]');
+  if(rv){ reviveAccount(rv.dataset.revive); return; }
+  const del = e.target.closest('[data-del]');
+  if(del){ openDelModal(del.dataset.del, del.dataset.delNick); return; }
+});
+
 /* ---------- 刷新循环 ---------- */
 
 async function refreshAll(){
-  const [status, credits, stats, history, calls, models] = await Promise.all([
+  const [status, credits, stats, history, calls, models, info] = await Promise.all([
     jget('api/status', null),
     jget('api/credits', null),
     jget('api/stats', null),
     jget('api/credits/history', null),
     jget('api/calls?limit=' + encodeURIComponent(callLimit), null),
-    jget('api/v1/models', null)
+    jget('api/v1/models', null),
+    jget('api/info', null)
   ]);
 
   renderStrip(status);
   renderCards(status, credits, stats, models);
+  renderInfo(info);
 
   document.getElementById('hourChart').innerHTML = barChart(stats && stats.hourly);
   document.getElementById('byModel').innerHTML = '<div class="foot" style="margin:0 0 8px">按模型</div>' +

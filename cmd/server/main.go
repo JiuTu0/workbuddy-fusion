@@ -210,6 +210,8 @@ func main() {
 		Stats:         statsTrack,
 		CallTrack:     callTrack,
 		CreditTrack:   creditTrk,
+		// 网页账号管理：auth 文件目录（非空时注册 /accounts/* 端点）。
+		AuthDir: cfg.AuthDir,
 	})
 	if creditTrk != nil {
 		// 积分快照采样口径复用 /credits 同一套聚合逻辑（UserResource）。

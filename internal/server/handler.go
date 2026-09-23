@@ -63,6 +63,10 @@ type Config struct {
 	Stats       *Stats
 	CallTrack   *CallTrack
 	CreditTrack *CreditTrack
+
+	// AuthDir auth 文件目录（./auths）。非空时启用网页账号管理（OAuth 添加 /
+	// 导入 / 删除 / 复活），新增凭据写入该目录；空 = 账号管理端点返回 503。
+	AuthDir string
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -81,6 +85,7 @@ type Handler struct {
 	cfg     Config
 	mux     *http.ServeMux
 	degrade degradeGate
+	logins  *loginSessions // 网页 OAuth 登录会话表（懒建：AuthDir 配置后才启用）
 }
 
 // NewHandler 构建 handler。
@@ -111,6 +116,22 @@ func NewHandler(cfg Config) *Handler {
 	h.mux.HandleFunc("GET /credits", h.withAuth(h.credits))
 	h.mux.HandleFunc("GET /credits/history", h.withAuth(h.creditsHistory))
 	h.mux.HandleFunc("GET /calls", h.withAuth(h.calls))
+	// 「API 接入信息」：仅在启用看板时注册（零回归：未配置看板凭据时该端点不存在，
+	// 外部探测不到 base_url / api_key 信息）。页面经 /api/info 访问时由 dashAuthed
+	// 标记放行，直接打 /info 的外部请求仍校验网关 api_key。
+	if h.dashboardEnabled() {
+		h.mux.HandleFunc("GET /info", h.withAuth(h.info))
+	}
+	// 网页账号管理（可选，零回归）：AuthDir 配置后启用（懒建会话表，避免
+	// 未配置时白白起一个后台 GC goroutine）。
+	if cfg.AuthDir != "" {
+		h.logins = newLoginSessions()
+		h.mux.HandleFunc("POST /accounts/login/start", h.withAuth(h.accountsLoginStart))
+		h.mux.HandleFunc("GET /accounts/login/poll", h.withAuth(h.accountsLoginPoll))
+		h.mux.HandleFunc("POST /accounts/import", h.withAuth(h.accountsImport))
+		h.mux.HandleFunc("POST /accounts/{uid}/revive", h.withAuth(h.accountsRevive))
+		h.mux.HandleFunc("DELETE /accounts/{uid}", h.withAuth(h.accountsDelete))
+	}
 	// 看板页面与 /api/* 入口：仅在配置了看板凭据时注册（缺省零回归）。
 	h.registerRoot()
 	h.registerDashboard()

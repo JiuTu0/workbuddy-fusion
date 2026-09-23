@@ -205,6 +205,25 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	}
 }
 
+// RemoveUID 从池中移除单个账号并**立即落盘**（防重启复活）。
+//
+// 与 SyncToDir 的剔除同语义（删除也要持久化回 state.json，否则下次启动 load()
+// 会把已删账号带回来）；但这里是网页看板「删除账号」的单账号入口：
+//   - 持锁 delete + dirty + saveLocked()，与 SyncToDir 的剔除路径一致；
+//   - 池中不存在该 uid 时为空操作（返回 false）——调用方据此决定是否按文件
+//     是否存在继续软删流程（文件可能未被加载，仍应移入回收站）。
+func (p *Pool) RemoveUID(uid string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.byUID[uid]; !ok {
+		return false
+	}
+	delete(p.byUID, uid)
+	p.dirty.Store(true)
+	p.saveLocked()
+	return true
+}
+
 // upsertLocked 更新或插入单个账号；已存在则只换凭证、保留 credits/cooling 状态。
 // 调用方必须已持有 p.mu；Add 与 SyncToDir 共用此 upsert 逻辑。
 func (p *Pool) upsertLocked(a *auth.Auth) {
